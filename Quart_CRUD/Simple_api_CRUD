@@ -1,0 +1,58 @@
+from quart import Quart,jsonify,request
+
+
+
+app=Quart(__name__)
+
+users=[]
+
+#data insert 
+
+@app.route('/create',methods=["POST"])
+async def create():
+
+    data=await request.get_json()
+
+    if not data:
+     return jsonify({"message":"error no data"})
+    else:
+     users.append(data)
+     return jsonify(users)
+    
+#get and show the data
+
+@app.route('/get',methods=["GET"])
+async def get():
+    
+    return jsonify({"message":"users all details","data":users})
+
+#update the user data
+
+@app.route('/update/<int:index>',methods=["PUT"])
+async def update(index):
+    data =await request.get_json()
+    if 0<= index <len(users):
+        users[index]=data
+        return jsonify({"message":"user update","data":users})
+    else:
+        return jsonify({"message":"user not found"})
+   
+#delete the user data
+#    
+@app.route('/delete/<int:index>',methods=["DELETE"])
+async def delete(index):
+
+    if 0<= index <len(users):
+        users.pop(index)
+        return jsonify({"message":"user update","data":users})
+    else:
+        return jsonify({"message":"user not found"})
+   
+    
+
+
+if __name__=="__main__":
+
+    app.run(debug=True)
+
+
