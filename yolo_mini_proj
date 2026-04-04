@@ -1,0 +1,104 @@
+import cv2
+from  ultralytics import YOLO
+import time
+import subprocess
+
+
+model = YOLO("yolo26n.pt")
+
+def detect_objects(frame):
+    results = model(frame)
+    detected_objects =[]
+
+    for r in results:
+        for box in r.boxes:
+            class_id = int(box.cls[0])
+            confidence = box.conf[0].item()
+
+
+            if confidence>0.3:
+                label = model.names[class_id]
+                detected_objects.append(label)
+
+
+
+                x1,y1,x2,y2=map(int,box.xyxy[0])
+                cv2.rectangle(frame,(x1,y1),(x2,y2),(0,255,0),2)
+                cv2.putText(frame,label,(x1,y1-10),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,0),2)
+
+
+    return frame,detected_objects
+
+
+
+def main():
+    rtsp_url = "rtsp://veeaVision:veeaVision@137.184.12.165:8554/cars-rtsp-836821?tcp"
+
+    video = cv2.VideoCapture(rtsp_url)
+    if not video.isOpened():
+        print("video not open")
+        return
+    
+    width,height=640,480
+
+    ffmpeg_process = subprocess.Popen([
+    'ffmpeg',
+    '-re',
+    '-f', 'rawvideo',
+    '-vcodec','rawvideo',
+    '-pix_fmt', 'bgr24',
+    '-s', f"{width}x{height}",
+    '-r', '25',
+    '-i', '-',
+    '-c:v', 'libx264',
+    '-preset', 'ultrafast',
+    '-tune', 'zerolatency',
+    '-rtsp_transport', 'tcp',  
+    '-f', 'rtsp',
+    'rtsp://localhost:8554/live'
+], stdin=subprocess.PIPE, bufsize=10**8)
+
+    prev_time = time.time()
+
+    while True:
+      success, frame = video.read()
+      if not success:
+        break
+
+      frame = cv2.resize(frame, (width, height))
+    
+      current_time = time.time()
+      fps = 1 / (current_time - prev_time)
+      prev_time = current_time
+
+      start = time.time()
+      frame, detected_objects = detect_objects(frame)
+      end = time.time()
+      detection_fps = 1 / (end - start)
+
+
+      cv2.putText(frame, f"Input FPS: {fps:.2f}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+      cv2.putText(frame, f"Detection FPS: {detection_fps:.2f}", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+
+      cv2.imshow("ai vision", frame)
+
+      try:
+         ffmpeg_process.stdin.write(frame.tobytes())
+      except BrokenPipeError:
+        print("RTSP stream stopped ")
+        break
+
+      if detected_objects:
+        print("Detected objects:", detected_objects)
+
+      if cv2.waitKey(1) & 0xFF == 27:
+        break
+
+    video.release()
+    ffmpeg_process.stdin.close()
+    cv2.destroyAllWindows()
+
+if __name__=="__main__":
+    main()      
